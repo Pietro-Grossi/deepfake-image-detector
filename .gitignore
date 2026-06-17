@@ -1,0 +1,35 @@
+# Python
+__pycache__/
+*.pyc
+
+# Virtual environment
+venv/
+.venv/
+
+# IDE
+.vscode/
+.idea/
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Environment variables
+.env
+
+# Dataset e file pesanti
+data/
+*.zip
+*.tar
+*.tar.gz
+
+# Modelli e risultati
+*.pt
+*.pth
+*.ckpt
+runs/
+results/
+logs/
+
+# Jupyter
+.ipynb_checkpoints/
