@@ -17,19 +17,25 @@ Thumbs.db
 # Environment variables
 .env
 
-# Dataset e file pesanti
-data/
+# Dataset e file pesanti (tracciamo solo il .gitkeep della cartella)
+data/*
+!data/.gitkeep
+tests/fixtures/
 *.zip
 *.tar
 *.tar.gz
 
-# Modelli e risultati
+# Modelli e risultati (tracciamo solo i .gitkeep)
 *.pt
 *.pth
 *.ckpt
 runs/
-results/
+results/*
+!results/.gitkeep
+experiments/*
+!experiments/.gitkeep
 logs/
+*.log
 
 # Jupyter
 .ipynb_checkpoints/
