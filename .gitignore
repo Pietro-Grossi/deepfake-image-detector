@@ -39,3 +39,7 @@ logs/
 
 # Jupyter
 .ipynb_checkpoints/
+
+# claude
+.claude/
+CLAUDE.md
