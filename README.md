@@ -64,6 +64,38 @@ pytest tests/test_smoke.py -v     # verifica utility di base su CPU
 I componenti dati-dipendenti accettano `--data-root`, così lo stesso codice punta a
 `tests/fixtures/` in locale e a `data/` sulla VM.
 
+## Preparazione dati GenImage (sulla VM)
+
+GenImage si distribuisce su Google Drive come **ZIP multi-volume per generatore**
+(`imagenet_ai_<data>_<gen>.z01 … .z12 + .zip`, ~36 GB l'uno). Flusso, **un generatore alla volta**:
+
+```bash
+# 1. ricomporre i volumi ed estrarre (NON unzippare i singoli .z0x)
+zip -s 0 imagenet_ai_0508_adm.zip --out adm_full.zip
+unzip adm_full.zip                       # -> imagenet_ai_0508_adm/{train,val}/{ai,nature}/
+
+# 2. campionare un subset bilanciato nel dataset incrementale persistente
+python scripts/sample_generator.py --src imagenet_ai_0508_adm \
+    --dst data/genimage_subset --train-per-class 5000 --val-per-class 2000
+
+# 3. liberare disco: cancellare archivi grezzi + estrazione, tenere solo il subset
+rm -rf imagenet_ai_0508_adm adm_full.zip imagenet_ai_0508_adm.z*
+```
+
+Ripetendo per ogni generatore, `data/genimage_subset/` cresce con `imagenet_<gen>/{train,val}/{ai,nature}/`.
+Poi si generano i CSV di split per gli esperimenti (non copia immagini, solo percorsi):
+
+```bash
+# baseline real/fake misto su tutti i generatori scaricati
+python scripts/build_splits.py --data-root data/genimage_subset --name baseline_misto --mode mixed
+# cross-generator: train sul pool, test su ogni held-out
+python scripts/build_splits.py --data-root data/genimage_subset --name crossgen_sdv4 \
+    --mode cross-gen --pool sdv4 --heldout adm biggan glide
+```
+
+`sample_generator` copia solo `train/val`; `build_splits` ricava il **test** dividendo la val
+(GenImage non ha test ufficiale) e compone gli split. In locale lo stesso `build_splits` gira su `tests/fixtures/`.
+
 ## Stato
 
 - [x] **M0** — Setup ambiente, utility, fixtures, smoke test
