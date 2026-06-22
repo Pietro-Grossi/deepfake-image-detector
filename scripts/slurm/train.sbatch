@@ -23,7 +23,7 @@ echo "Config: $CONFIG | data-root: $DATA_ROOT"
 
 # --- Ambiente (adattare al cluster: module load / conda activate) ---
 # module load cuda/12.1
-source ~/grossi/deepfake-image-detector/.venv/bin/activate
+source ~/grossi/.venv/bin/activate
 
 
 python -c "import torch; print('CUDA disponibile:', torch.cuda.is_available())"
