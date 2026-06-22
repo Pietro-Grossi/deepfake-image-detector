@@ -23,8 +23,8 @@ echo "Config: $CONFIG | data-root: $DATA_ROOT"
 
 # --- Ambiente (adattare al cluster: module load / conda activate) ---
 # module load cuda/12.1
-# source ~/miniconda3/etc/profile.d/conda.sh
-conda activate genimage
+source ~/grossi/deepfake-image-detector/.venv/bin/activate
+
 
 python -c "import torch; print('CUDA disponibile:', torch.cuda.is_available())"
 
