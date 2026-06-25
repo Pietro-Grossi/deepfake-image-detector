@@ -9,6 +9,7 @@ from __future__ import annotations
 import torch
 
 from src import utils
+from src.models import build_model
 
 
 def test_set_seed_reproducible():
@@ -53,3 +54,23 @@ def test_average_meter():
     meter.update(2.0, n=1)
     meter.update(4.0, n=3)  # media = (2 + 12) / 4 = 3.5
     assert meter.avg == 3.5
+
+
+def test_build_resnet50_without_pretrained_weights():
+    """ResNet-50 si costruisce senza scaricare pesi durante lo smoke test."""
+    cfg = {
+        "model": {
+            "name": "resnet50",
+            "num_classes": 2,
+            "pretrained": False,
+            "dropout": 0.2,
+            "freeze_backbone": True,
+        }
+    }
+    model = build_model(cfg)
+    out = model(torch.randn(1, 3, 224, 224))
+    assert out.shape == (1, 2)
+    assert all(
+        (not param.requires_grad) or name.startswith("fc.")
+        for name, param in model.named_parameters()
+    )

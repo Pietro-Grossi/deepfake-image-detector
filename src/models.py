@@ -1,8 +1,7 @@
 """Definizione dei modelli e factory `build_model`.
 
-Implementazione CNN custom (baseline didattica). I modelli
-pretrained (ResNet/EfficientNet/Swin) verranno aggiunti qui in M3/M4 ampliando
-`build_model`, senza toccare il loop di training (che resta generico sul modello).
+Implementazione CNN custom (baseline didattica) e modelli pretrained usati per
+il confronto sperimentale, senza specializzare il loop di training.
 """
 
 from __future__ import annotations
@@ -11,6 +10,7 @@ from typing import Any
 
 import torch
 import torch.nn as nn
+from torchvision.models import ResNet50_Weights, resnet50
 
 
 def conv_block(in_ch: int, out_ch: int) -> nn.Sequential:
@@ -73,11 +73,34 @@ class CustomCNN(nn.Module):
         return self.classifier(x)
 
 
+def build_resnet50(
+    num_classes: int = 2,
+    pretrained: bool = True,
+    dropout: float = 0.2,
+    freeze_backbone: bool = False,
+) -> nn.Module:
+    """ResNet-50 con testa finale adattata alla classificazione real/fake."""
+    weights = ResNet50_Weights.DEFAULT if pretrained else None
+    model = resnet50(weights=weights)
+
+    in_features = model.fc.in_features
+    model.fc = nn.Sequential(
+        nn.Dropout(dropout),
+        nn.Linear(in_features, num_classes),
+    )
+
+    if freeze_backbone:
+        for name, param in model.named_parameters():
+            param.requires_grad = name.startswith("fc.")
+
+    return model
+
+
 def build_model(cfg: dict[str, Any]) -> nn.Module:
     """Factory: costruisce il modello a partire dalla sezione `model` del config.
 
     Il campo `model.name` seleziona l'architettura. Aggiungere qui i nuovi modelli
-    (resnet50, efficientnet_b0, swin_tiny) in M3/M4.
+    (efficientnet_b0, swin_tiny) in M3/M4.
     """
     model_cfg = cfg["model"]
     name = model_cfg["name"]
@@ -88,10 +111,17 @@ def build_model(cfg: dict[str, Any]) -> nn.Module:
             num_classes=num_classes,
             dropout=model_cfg.get("dropout", 0.3),
         )
+    if name == "resnet50":
+        return build_resnet50(
+            num_classes=num_classes,
+            pretrained=model_cfg.get("pretrained", True),
+            dropout=model_cfg.get("dropout", 0.2),
+            freeze_backbone=model_cfg.get("freeze_backbone", False),
+        )
 
     raise NotImplementedError(
         f"Modello '{name}' non ancora implementato "
-        f"Disponibili al momento: ['cnn_custom']."
+        f"Disponibili al momento: ['cnn_custom', 'resnet50']."
     )
 
 

@@ -93,14 +93,44 @@ def train_one_epoch(model, loader, criterion, optimizer, scaler, device,
 # Costruzione optimizer / scheduler
 # -----------------------------------------------------------------------------
 
-def build_optimizer(model: nn.Module, train_cfg: dict[str, Any]):
+def _trainable_params(model: nn.Module):
+    return [p for p in model.parameters() if p.requires_grad]
+
+
+def _finetuning_param_groups(model: nn.Module, lr: float, backbone_lr_mult: float):
+    backbone_params = []
+    head_params = []
+    for name, param in model.named_parameters():
+        if not param.requires_grad:
+            continue
+        if name.startswith("fc."):
+            head_params.append(param)
+        else:
+            backbone_params.append(param)
+
+    groups = []
+    if backbone_params:
+        groups.append({"params": backbone_params, "lr": lr * backbone_lr_mult})
+    if head_params:
+        groups.append({"params": head_params, "lr": lr})
+    return groups or _trainable_params(model)
+
+
+def build_optimizer(model: nn.Module, train_cfg: dict[str, Any],
+                    model_cfg: dict[str, Any] | None = None):
     name = train_cfg.get("optimizer", "adamw").lower()
     lr = train_cfg["lr"]
     wd = train_cfg.get("weight_decay", 0.0)
+    model_cfg = model_cfg or {}
+    backbone_lr_mult = model_cfg.get("backbone_lr_mult", 1.0)
+    if model_cfg.get("name") == "resnet50" and backbone_lr_mult != 1.0:
+        params = _finetuning_param_groups(model, lr, backbone_lr_mult)
+    else:
+        params = _trainable_params(model)
     if name == "adamw":
-        return torch.optim.AdamW(model.parameters(), lr=lr, weight_decay=wd)
+        return torch.optim.AdamW(params, lr=lr, weight_decay=wd)
     if name == "sgd":
-        return torch.optim.SGD(model.parameters(), lr=lr, momentum=0.9, weight_decay=wd)
+        return torch.optim.SGD(params, lr=lr, momentum=0.9, weight_decay=wd)
     raise ValueError(f"Optimizer non supportato: {name}")
 
 
@@ -164,7 +194,7 @@ def main() -> None:
     logger.info(f"Modello '{cfg['model']['name']}' | "
                 f"parametri allenabili: {utils.count_parameters(model):,}")
     criterion = nn.CrossEntropyLoss()
-    optimizer = build_optimizer(model, train_cfg)
+    optimizer = build_optimizer(model, train_cfg, cfg.get("model", {}))
     scheduler = build_scheduler(optimizer, train_cfg)
     scaler = torch.amp.GradScaler(enabled=use_amp)
 
