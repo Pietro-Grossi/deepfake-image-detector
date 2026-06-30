@@ -6,7 +6,7 @@
 # =============================================================================
 
 experiment:
-  name: cnn_custom_baseline        # usato per la cartella in experiments/
+  name: cnn_crossgen_7gen_test_biggan        # usato per la cartella in experiments/
   seed: 42
 
 model:
@@ -14,15 +14,17 @@ model:
   num_classes: 2                   # [nature=0, ai=1]
   pretrained: false                # ignorato dalla cnn_custom; true per i modelli timm
   dropout: 0.3
+  dropout_head: 0.4
+  hidden_dim: 128
   # fine-tuning (usato dai modelli pretrained, ignorato dalla cnn_custom):
   freeze_backbone: false
   backbone_lr_mult: 0.1            # lr backbone = lr * questo fattore
 
 data:
   # CSV degli split generati da scripts/build_splits.py (relativi a --data-root)
-  train_csv: splits/train.csv
-  val_csv: splits/val.csv
-  test_csv: splits/test_in_distribution.csv
+  train_csv: splits/crossgen_7gen_test_biggan/train.csv
+  val_csv: splits/crossgen_7gen_test_biggan/val.csv
+  test_csv: splits/crossgen_7gen_test_biggan/test_in_distribution.csv
   image_size: 224
   num_workers: 8                   # 8-16 sulla VM (32 CPU); ridurre in locale
   # statistiche di normalizzazione ImageNet (default per i modelli pretrained)

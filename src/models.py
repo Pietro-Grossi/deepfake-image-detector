@@ -13,58 +13,71 @@ import torch.nn as nn
 from torchvision.models import ResNet50_Weights, resnet50
 
 
-def conv_block(in_ch: int, out_ch: int) -> nn.Sequential:
-    """Blocco convoluzionale base: Conv 3x3 -> BatchNorm -> ReLU -> MaxPool 2x2.
+def vgg_block(in_ch: int, out_ch: int, n_convs: int = 2) -> nn.Sequential:
+    """Blocco VGG-style: n_convs x (Conv 3x3 -> BatchNorm -> ReLU) + MaxPool.
 
-    - in_ch: canali in ingresso (es. 3 per immagini RGB: 3 x 224 x 224)
-    - out_ch: canali in uscita
-    - Conv 3x3 con padding=1: estrae feature locali mantenendo la dimensione spaziale (32 x 224 x 224).
-    - BatchNorm: normalizza le attivazioni -> training piu' stabile e veloce.
-    - ReLU: non linearita'.
-    - MaxPool 2x2 (prende matrici 2x2 e seleazioni il valore localmente migliore): dimezza altezza e larghezza (sotto-campionamento: 32 x 112 x 112).
+    Impilare piu' convoluzioni prima del pooling aumenta la capacita' sulle
+    texture e sugli artefatti locali senza rendere la baseline troppo complessa.
     """
-    return nn.Sequential(
-        nn.Conv2d(in_ch, out_ch, kernel_size=3, padding=1, bias=False),
-        nn.BatchNorm2d(out_ch),
-        nn.ReLU(inplace=True),
-        nn.MaxPool2d(kernel_size=2),
-    )
+    layers: list[nn.Module] = []
+    for i in range(n_convs):
+        layers += [
+            nn.Conv2d(
+                in_ch if i == 0 else out_ch,
+                out_ch,
+                kernel_size=3,
+                padding=1,
+                bias=False,
+            ),
+            nn.BatchNorm2d(out_ch),
+            nn.ReLU(inplace=True),
+        ]
+    layers.append(nn.MaxPool2d(kernel_size=2))
+    return nn.Sequential(*layers)
 
 
 class CustomCNN(nn.Module):
-    """CNN convoluzionale (baseline real/fake).
+    """CNN VGG-style (baseline real/fake).
 
     Architettura (input 3x224x224):
-        blocco 1: 3   -> 32   | 224 -> 112
-        blocco 2: 32  -> 64   | 112 -> 56
-        blocco 3: 64  -> 128  | 56  -> 28
-        blocco 4: 128 -> 256  | 28  -> 14
-        
-        AdaptiveAvgPool -> 256x1x1 -> flatten -> Dropout -> Linear(256, num_classes), per ogni canale finale 
-        256 x 14 x 14 si prende il valore medio (AdaptiveAvgPool) -> 256 -> classificazione.
+        blocco 1: 3   -> 32   (x2 conv) | 224 -> 112
+        blocco 2: 32  -> 64   (x2 conv) | 112 -> 56
+        blocco 3: 64  -> 128  (x2 conv) | 56  -> 28
+        blocco 4: 128 -> 256  (x2 conv) | 28  -> 14
+        blocco 5: 256 -> 512  (x1 conv) | 14  -> 7
 
-    L'AdaptiveAvgPool rende la testa indipendente dalla risoluzione esatta in ingresso
-    (riduce ogni feature map a un singolo valore medio): robusto e con pochi parametri.
+        AdaptiveAvgPool -> 512 -> Dropout -> Linear(512, hidden_dim)
+        -> ReLU -> Dropout -> Linear(hidden_dim, num_classes).
+
+    Resta una baseline custom semplice, ma piu' capace della versione con una
+    sola convoluzione per blocco.
     """
 
+    BLOCKS: tuple[tuple[int, int], ...] = (
+        (32, 2), (64, 2), (128, 2), (256, 2), (512, 1),
+    )
+
     def __init__(self, num_classes: int = 2, dropout: float = 0.3,
-                 channels: tuple[int, ...] = (32, 64, 128, 256)) -> None:
-        super().__init__() #necessario utilizzare correttamente nn.Module
+                 dropout_head: float = 0.4, hidden_dim: int = 128) -> None:
+        super().__init__()
 
         # --- Estrattore di feature: sequenza di blocchi convoluzionali ---
         blocks = []
         in_ch = 3  # immagine RGB
-        for out_ch in channels:
-            blocks.append(conv_block(in_ch, out_ch))
+        for out_ch, n_convs in self.BLOCKS:
+            blocks.append(vgg_block(in_ch, out_ch, n_convs))
             in_ch = out_ch
         self.features = nn.Sequential(*blocks)      # *blocks: unpack della lista in argomenti posizionali
 
         # --- Testa di classificazione ---
-        self.pool = nn.AdaptiveAvgPool2d(1)          # -> (256, 1, 1)
+        self.pool = nn.AdaptiveAvgPool2d(1)          # -> (512, 1, 1)
         self.classifier = nn.Sequential(
-            nn.Flatten(),                            # -> (256)
-            nn.Dropout(dropout),                     # regolarizzazione
-            nn.Linear(in_ch, num_classes),           # -> (B, num_classes)
+            nn.Flatten(),                            # -> (512)
+            nn.Dropout(dropout_head),                # regolarizzazione testa
+            nn.Linear(in_ch, hidden_dim),            # 512 -> hidden_dim
+            nn.ReLU(inplace=True),
+            nn.Dropout(dropout),
+            nn.Linear(hidden_dim, num_classes),      # -> (B, num_classes)
         )
 
     def forward(self, x: torch.Tensor) -> torch.Tensor:
@@ -110,6 +123,8 @@ def build_model(cfg: dict[str, Any]) -> nn.Module:
         return CustomCNN(
             num_classes=num_classes,
             dropout=model_cfg.get("dropout", 0.3),
+            dropout_head=model_cfg.get("dropout_head", 0.4),
+            hidden_dim=model_cfg.get("hidden_dim", 128),
         )
     if name == "resnet50":
         return build_resnet50(
