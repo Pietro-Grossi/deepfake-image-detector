@@ -10,7 +10,7 @@ from typing import Any
 
 import torch
 import torch.nn as nn
-from torchvision.models import ResNet50_Weights, resnet50
+from torchvision.models import ResNet50_Weights, Swin_T_Weights, resnet50, swin_t
 
 
 def vgg_block(in_ch: int, out_ch: int, n_convs: int = 2) -> nn.Sequential:
@@ -109,11 +109,34 @@ def build_resnet50(
     return model
 
 
+def build_swin_tiny(
+    num_classes: int = 2,
+    pretrained: bool = True,
+    dropout: float = 0.2,
+    freeze_backbone: bool = False,
+) -> nn.Module:
+    """Swin-Tiny con testa finale adattata alla classificazione real/fake."""
+    weights = Swin_T_Weights.DEFAULT if pretrained else None
+    model = swin_t(weights=weights)
+
+    in_features = model.head.in_features
+    model.head = nn.Sequential(
+        nn.Dropout(dropout),
+        nn.Linear(in_features, num_classes),
+    )
+
+    if freeze_backbone:
+        for name, param in model.named_parameters():
+            param.requires_grad = name.startswith("head.")
+
+    return model
+
+
 def build_model(cfg: dict[str, Any]) -> nn.Module:
     """Factory: costruisce il modello a partire dalla sezione `model` del config.
 
     Il campo `model.name` seleziona l'architettura. Aggiungere qui i nuovi modelli
-    (efficientnet_b0, swin_tiny) in M3/M4.
+    (efficientnet_b0) in M3/M4.
     """
     model_cfg = cfg["model"]
     name = model_cfg["name"]
@@ -133,10 +156,17 @@ def build_model(cfg: dict[str, Any]) -> nn.Module:
             dropout=model_cfg.get("dropout", 0.2),
             freeze_backbone=model_cfg.get("freeze_backbone", False),
         )
+    if name in {"swin_tiny", "swin_t"}:
+        return build_swin_tiny(
+            num_classes=num_classes,
+            pretrained=model_cfg.get("pretrained", True),
+            dropout=model_cfg.get("dropout", 0.2),
+            freeze_backbone=model_cfg.get("freeze_backbone", False),
+        )
 
     raise NotImplementedError(
         f"Modello '{name}' non ancora implementato "
-        f"Disponibili al momento: ['cnn_custom', 'resnet50']."
+        f"Disponibili al momento: ['cnn_custom', 'resnet50', 'swin_tiny']."
     )
 
 

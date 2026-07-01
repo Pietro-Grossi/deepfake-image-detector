@@ -103,7 +103,7 @@ def _finetuning_param_groups(model: nn.Module, lr: float, backbone_lr_mult: floa
     for name, param in model.named_parameters():
         if not param.requires_grad:
             continue
-        if name.startswith("fc."):
+        if name.startswith(("fc.", "head.")):
             head_params.append(param)
         else:
             backbone_params.append(param)
@@ -123,7 +123,7 @@ def build_optimizer(model: nn.Module, train_cfg: dict[str, Any],
     wd = train_cfg.get("weight_decay", 0.0)
     model_cfg = model_cfg or {}
     backbone_lr_mult = model_cfg.get("backbone_lr_mult", 1.0)
-    if model_cfg.get("name") == "resnet50" and backbone_lr_mult != 1.0:
+    if model_cfg.get("name") in {"resnet50", "swin_tiny", "swin_t"} and backbone_lr_mult != 1.0:
         params = _finetuning_param_groups(model, lr, backbone_lr_mult)
     else:
         params = _trainable_params(model)
